@@ -1553,7 +1553,10 @@ function submitData() {
       answers:  S.answers.join(', '),
       _subject: `AI Leadership Index: ${S.name} is Stage ${s}: ${STAGES[s].name}`,
       _captcha: 'false',
-      _template:'table'
+      _template:'table',
+      ...(S.email && {
+        _autoresponse: `Hi ${S.name}, thank you for completing the AI Leadership Index. Your result is Stage ${s}: ${STAGES[s].name}. Screenshot your results screen to save it, or return any time at quiz.andyrankin.com.au. To go further with AI as a school leader, visit andyrankin.com.au. Andy Rankin | AI & Productivity for Leaders`
+      })
     })
   }).catch(() => {}); // silent fail
 }

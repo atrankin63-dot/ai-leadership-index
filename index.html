@@ -896,7 +896,7 @@ body {
     <!-- ─── 1. WELCOME ─── -->
     <div id="screen-welcome" class="screen active">
       <div class="screen-inner">
-        <div class="welcome-eyebrow">Andy Rankin &middot; AI &amp; Productivity for Leaders</div>
+        <div class="welcome-eyebrow" id="welcome-eyebrow">Andy Rankin &middot; AI &amp; Productivity for Leaders</div>
         <h1 class="welcome-title">The <em>AI Leadership</em> Index</h1>
         <p class="welcome-body">
           Every school leader is somewhere on the AI journey. Most just aren&rsquo;t
@@ -966,7 +966,7 @@ body {
       <div class="screen-inner">
         <div class="email-eyebrow">Almost there</div>
         <h2 class="email-title" id="email-heading">Your result is ready</h2>
-        <p class="email-body">
+        <p class="email-body" id="email-body">
           Enter your email to receive your AI Readiness Report and hear
           more from Andy about making AI work in your leadership practice.
         </p>
@@ -1238,12 +1238,37 @@ const S = {
 };
 
 /* ═══════════════════════════════════════════════════
+   EVENT COHORTS  (?cohort=orbis)
+   A completion tagged with an event skips the sales CTA and gets the
+   no FormSubmit auto-reply. The subject carries [Orbis] so the 11am
+   permission scan drafts the Orbis thank-you in Mail for Andy to approve.
+═══════════════════════════════════════════════════ */
+const EVENTS = {
+  orbis: {
+    tag:       'Orbis',
+    eyebrow:   'Andy Rankin &middot; Orbis &middot; 19 November 2026',
+    emailBody: 'Enter your email so Andy can see your result before the Orbis sessions on Thursday 19 November.',
+    ctaCaption:'Andy will use the results from everyone attending to pitch the Orbis sessions at the right level.',
+    finalTitle: n => `Thanks, ${n}.`,
+    finalBody: 'Andy will use your result to shape the sessions. See you at Orbis on Thursday 19 November.'
+  }
+};
+
+/* ═══════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════ */
 (function init() {
   const p = new URLSearchParams(window.location.search);
-  S.cohort   = p.get('cohort') || null;
-  S.workshop = !!S.cohort;
+  S.cohort   = (p.get('cohort') || '').toLowerCase() || null;
+  S.dryRun   = p.has('dryrun') || window.location.hostname !== 'quiz.andyrankin.com.au';
+  S.event    = EVENTS[S.cohort] || null;
+  // Event cohorts (e.g. Orbis) keep the email gate so every completion is recorded,
+  // and replace the sales CTA and the standard auto-reply with event wording.
+  S.workshop = !!S.cohort && !S.event;
+  if (S.event) {
+    document.getElementById('welcome-eyebrow').innerHTML = S.event.eyebrow;
+    document.getElementById('email-body').textContent    = S.event.emailBody;
+  }
 
   // Name input wiring
   const nameInput = document.getElementById('name-input');
@@ -1490,7 +1515,11 @@ function showResults() {
 
   // CTA section
   const cta = document.getElementById('cta-zone');
-  if (S.workshop) {
+  if (S.event) {
+    cta.innerHTML = `
+      <p class="cta-caption">${S.event.ctaCaption}</p>
+      <button class="btn-primary" onclick="goFinal()">Finish &rarr;</button>`;
+  } else if (S.workshop) {
     cta.innerHTML = `
       <button class="btn-primary" onclick="goShare()">Share my result with Andy &rarr;</button>
       <button class="btn-secondary" onclick="goFinal()">Skip for now</button>`;
@@ -1534,6 +1563,12 @@ function doShare() {
    FINAL SCREEN
 ═══════════════════════════════════════════════════ */
 function goFinal() {
+  if (S.event) {
+    document.getElementById('final-title').textContent = S.event.finalTitle(S.name);
+    document.getElementById('final-body').textContent  = S.event.finalBody;
+    showScreen('screen-final');
+    return;
+  }
   document.getElementById('final-title').textContent = S.workshop
     ? `See you at the workshop, ${S.name}.`
     : `Thanks, ${S.name}.`;
@@ -1559,22 +1594,28 @@ function shareLinkedIn() {
 ═══════════════════════════════════════════════════ */
 function submitData() {
   const s = S.stage;
-  fetch('https://formsubmit.co/ajax/andy@andyrankin.com.au', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({
+  const stageText = `Stage ${s}: ${STAGES[s].name}`;
+  const tag = S.event ? ` [${S.event.tag}]` : '';
+  const payload = {
       name:     S.name        || 'Not provided',
       email:    S.email       || 'Not provided',
       stage:    `Stage ${s}: ${STAGES[s].name}`,
       cohort:   S.cohort      || 'general-public',
       answers:  S.answers.join(', '),
-      _subject: `AI Leadership Index: ${S.name} is Stage ${s}: ${STAGES[s].name}`,
+      _subject: `AI Leadership Index${tag}: ${S.name} is ${stageText}`,
       _captcha: 'false',
       _template:'table',
-      ...(S.email && {
+      // Event cohorts get NO instant auto-reply: Andy approves a Mail draft instead
+      ...(S.email && !S.event && {
         _autoresponse: `Hi ${S.name}, thank you for completing the AI Leadership Index. Your result is Stage ${s}: ${STAGES[s].name}. Screenshot your results screen to save it, or return any time at quiz.andyrankin.com.au. To go further with AI as a school leader, visit andyrankin.com.au. Andy Rankin | AI & Productivity for Leaders`
       })
-    })
+  };
+  // Test copies never post: anywhere other than the live host, or with ?dryrun
+  if (S.dryRun) { window.__lastSubmission = payload; console.log('[dry run] FormSubmit payload', payload); return; }
+  fetch('https://formsubmit.co/ajax/andy@andyrankin.com.au', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify(payload)
   }).catch(() => {}); // silent fail
 }
 

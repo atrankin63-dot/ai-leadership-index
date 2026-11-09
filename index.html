@@ -1239,18 +1239,19 @@ const S = {
 
 /* ═══════════════════════════════════════════════════
    EVENT COHORTS  (?cohort=orbis)
-   A completion tagged with an event skips the sales CTA and gets the
-   no FormSubmit auto-reply. The subject carries [Orbis] so the 11am
-   permission scan drafts the Orbis thank-you in Mail for Andy to approve.
+   A completion tagged with an event is anonymous: no email step, no
+   sales CTA, no auto-reply, and only stage, answers, cohort and the
+   [Orbis] subject tag leave the page. The name stays in the browser.
+   The 11am permission scan appends each one to the Orbis results CSV.
 ═══════════════════════════════════════════════════ */
 const EVENTS = {
   orbis: {
     tag:       'Orbis',
     eyebrow:   'Andy Rankin &middot; Orbis &middot; 19 November 2026',
-    emailBody: 'Enter your email so Andy can see your result before the Orbis sessions on Thursday 19 November.',
-    ctaCaption:'Andy will use the results from everyone attending to pitch the Orbis sessions at the right level.',
+    nameBody:  'What’s your first name? We’ll use it only to personalise the result on this screen. No email is needed, and no name or email is sent to anyone.',
+    ctaCaption:'No email is needed, and no name or email is sent to anyone. Andy receives only your stage and ten answers, and will use the results from everyone attending to pitch the Orbis sessions at the right level. If you would like to keep your result, a screenshot will save it.',
     finalTitle: n => `Thanks, ${n}.`,
-    finalBody: 'Andy will use your result to shape the sessions. See you at Orbis on Thursday 19 November.',
+    finalBody: 'No name or email was sent to anyone. See you at Orbis on Thursday 19 November.',
     stepSwap:  [["That's exactly what the Take Back 5 programme delivers. Find out more at andyrankin.com.au.",
                  "You'll start or improve your own at the Orbis sessions on Thursday 19 November."]]
   }
@@ -1264,12 +1265,12 @@ const EVENTS = {
   S.cohort   = (p.get('cohort') || '').toLowerCase() || null;
   S.dryRun   = p.has('dryrun') || window.location.hostname !== 'quiz.andyrankin.com.au';
   S.event    = EVENTS[S.cohort] || null;
-  // Event cohorts (e.g. Orbis) keep the email gate so every completion is recorded,
+  // Event cohorts (e.g. Orbis) skip the email gate and send an anonymous result,
   // and replace the sales CTA and the standard auto-reply with event wording.
   S.workshop = !!S.cohort && !S.event;
   if (S.event) {
     document.getElementById('welcome-eyebrow').innerHTML = S.event.eyebrow;
-    document.getElementById('email-body').textContent    = S.event.emailBody;
+    document.querySelector('#screen-name .screen-sublabel').textContent = S.event.nameBody;
   }
 
   // Name input wiring
@@ -1426,6 +1427,12 @@ function finishQuiz() {
   S.stage     = avg < 1.5 ? 1 : avg < 2.5 ? 2 : avg < 3.5 ? 3 : avg < 4.5 ? 4 : 5;
 
   if (S.workshop) {
+    goCalculating();
+  } else if (S.event) {
+    // Anonymous event cohort: no email gate, and the result is sent exactly once
+    if (S.eventSent) return;
+    S.eventSent = true;
+    submitData();
     goCalculating();
   } else {
     // Email gate
@@ -1599,13 +1606,17 @@ function submitData() {
   const s = S.stage;
   const stageText = `Stage ${s}: ${STAGES[s].name}`;
   const tag = S.event ? ` [${S.event.tag}]` : '';
-  const payload = {
+  // Event cohorts are anonymous: no name or email field, and no name in the subject
+  const identity = S.event ? {} : {
       name:     S.name        || 'Not provided',
-      email:    S.email       || 'Not provided',
+      email:    S.email       || 'Not provided'
+  };
+  const payload = {
+      ...identity,
       stage:    `Stage ${s}: ${STAGES[s].name}`,
       cohort:   S.cohort      || 'general-public',
       answers:  S.answers.join(', '),
-      _subject: `AI Leadership Index${tag}: ${S.name} is ${stageText}`,
+      _subject: `AI Leadership Index${tag}: ${S.event ? '' : `${S.name} is `}${stageText}`,
       _captcha: 'false',
       _template:'table',
       // Event cohorts get NO instant auto-reply: Andy approves a Mail draft instead
